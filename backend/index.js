@@ -54,20 +54,87 @@ try {
 
   // auth token endpoint for login and token exchange
   app.post('/api/auth/token', async (req, res) => {
-    // TODO: handle token requests
-    res.status(500).json({ message: 'Not yet implemented!' });
+    switch (req.body.grant_type) {
+      case 'client_credentials':
+        const email = req.body.client_id.toLowerCase();
+        const password = req.body.client_secret;
+        const existingUser = await colUsers.findOne({ email });
+        if (!existingUser) {
+          res.status(400).send();
+        } else {
+          const passwordsMatch = await bcrypt.compare(password, existingUser.hash);
+          if (passwordsMatch) {
+            const accessToken = jwt.sign({
+              sub: existingUser._id,
+              iat: Date.now(),
+              exp: new Date(Date.now() + (1000 * 60 * 60)).getTime(),
+            }, process.env.JWT_SECURE_KEY);
+            const refreshToken = jwt.sign({
+              sub: existingUser._id,
+              iat: Date.now(),
+              exp: new Date(Date.now() + (1000 * 60 * 60 * 24 * 365)).getTime(),
+            }, process.env.JWT_SECURE_KEY);
+
+            res.status(200).json({ access_token: accessToken, refresh_token: refreshToken });
+          } else {
+            res.status(400).send();
+          }
+        }
+        break;
+      case 'refresh_token':
+        const token = req.body.refresh_token;
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECURE_KEY);
+          const accessToken = jwt.sign({
+            sub: decoded.sub,
+            iat: Date.now(),
+            exp: new Date(Date.now() + (1000 * 60 * 60)).getTime(),
+          }, process.env.JWT_SECURE_KEY);
+
+          res.status(200).json({ access_token: accessToken });
+        } catch (err) {
+          res.status(400).send();
+        }
+        break;
+      default:
+        res.status(500).json({ message: 'Grant type not implemented!' });
+    }
   });
 
   // auth register endpoint for user creation
   app.post('/api/auth/register', async (req, res) => {
-    // TODO: handle register requests
-    res.status(500).json({ message: 'Not yet implemented!' });
+    const user = {
+      email: req.body.email.toLowerCase(),
+      hash: await bcrypt.hash(req.body.password, 10),
+    };
+    const existingUser = await colUsers.findOne({ email: user.email });
+    if (existingUser) {
+      res.status(500).send();
+    } else {
+      const insertion = await colUsers.insertOne(user);
+      if (insertion.acknowledged) {
+        res.status(200).json({});
+      } else {
+        res.status(500).send();
+      }
+    }
   });
 
   // Authentication middleware
-  const auth = (req, res, next) => {
-    // TODO: check token and add user information or return error status
-    next();
+  const auth = async (req, res, next) => {
+    const token = req.headers.authorization.replace(/Bearer /i, '');
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECURE_KEY);
+      const existingUser = await colUsers.findOne({ _id: new ObjectId(decoded.sub) });
+      if (existingUser) {
+        req.user = existingUser;
+        next();
+      } else {
+        res.status(401).send();
+      }
+    } catch (err) {
+      res.status(401).send();
+    }
   }
 
 
@@ -75,14 +142,14 @@ try {
   // ToDo Endpoints
 
   // get all ToDos
-  app.get('/api/todos', async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
-    const toDos = await colToDos.find().toArray();
+  app.get('/api/todos', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+    const toDos = await colToDos.find({ user_id: req.user._id }).toArray();
     res.status(200).json(toDos);
   });
 
   // get one ToDo
-  app.get('/api/todos/:id', async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
-    const toDo = await colToDos.findOne({ _id: new ObjectId(req.params.id) });
+  app.get('/api/todos/:id', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+    const toDo = await colToDos.findOne({ _id: new ObjectId(req.params.id), user_id: req.user._id });
     if (toDo) {
       res.status(200).json(toDo);
     } else {
@@ -91,10 +158,12 @@ try {
   });
 
   // add a ToDo
-  app.post('/api/todos/', async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
-    const insertion = await colToDos.insertOne(req.body);
+  app.post('/api/todos/', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+    const data = req.body;
+    data.user_id = req.user._id;
+    const insertion = await colToDos.insertOne(data);
     if (insertion.acknowledged) {
-      const toDo = await colToDos.findOne({ _id: insertion.insertedId });
+      const toDo = await colToDos.findOne({ _id: insertion.insertedId, user_id: req.user._id });
       if (toDo) {
         res.status(200).json(toDo);
       } else {
@@ -106,12 +175,12 @@ try {
   });
 
   // update a ToDo
-  app.put('/api/todos/:id', async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+  app.put('/api/todos/:id', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
     const updateData = req.body;
     delete updateData._id;
-    const updated = await colToDos.updateOne({ _id: new ObjectId(req.params.id) }, { $set: updateData });
+    const updated = await colToDos.updateOne({ _id: new ObjectId(req.params.id), user_id: req.user._id }, { $set: updateData });
     if (updated.modifiedCount === 1) {
-      const toDo = await colToDos.findOne({ _id: new ObjectId(req.params.id) });
+      const toDo = await colToDos.findOne({ _id: new ObjectId(req.params.id), user_id: req.user._id });
       if (toDo) {
         res.status(200).json(toDo);
       } else {
@@ -123,8 +192,8 @@ try {
   });
 
   // delete a ToDo
-  app.delete('/api/todos/:id', async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
-    const deleted = await colToDos.deleteOne({ _id: new ObjectId(req.params.id) });
+  app.delete('/api/todos/:id', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+    const deleted = await colToDos.deleteOne({ _id: new ObjectId(req.params.id), user_id: req.user._id });
     if (deleted.deletedCount === 1) {
       res.status(200).json({});
     } else {

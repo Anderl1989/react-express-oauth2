@@ -1,3 +1,5 @@
+import { isTokenValid } from "./token";
+
 export default async function request(resource, method = 'GET', data = {}, authenticated = true) {
   // check if frontend is running in dev mode
   const isDev = window.location.port === '5173';
@@ -7,10 +9,27 @@ export default async function request(resource, method = 'GET', data = {}, authe
     ? `http://localhost:3000/api${resource}`
     : `/api${resource}`;
 
+  // TODO: handle auth expired
+  let accessToken = localStorage.getItem('access_token');
+  if (authenticated) {
+    if (!isTokenValid()) {
+      const tokens = await post(
+        '/auth/token',
+        {
+          refresh_token: localStorage.getItem('refresh_token'),
+          grant_type: 'refresh_token'
+        },
+        false
+      );
+      localStorage.setItem('access_token', tokens.access_token);
+      accessToken = tokens.access_token;
+    }
+  }
+
   // add authentication header if request should be authenticated
   const headers = authenticated
     ? {
-      // TODO: add auth header
+      Authorization: `Bearer ${accessToken}`,
     }
     : {};
 
@@ -23,8 +42,6 @@ export default async function request(resource, method = 'GET', data = {}, authe
   const body = method !== 'GET'
     ? JSON.stringify(data)
     : undefined;
-
-  // TODO: handle auth expired
 
   // send request
   const response = await fetch(url, {

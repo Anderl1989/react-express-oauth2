@@ -74,7 +74,7 @@ function ToDo({ open, selectedItem, onClose }) {
             const changedToDo = {
               ...toDo,
               title: event.target.value,
-            }
+            };
             setToDo(changedToDo);
           }}
         />

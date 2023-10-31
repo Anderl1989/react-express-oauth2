@@ -1,10 +1,11 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Button, CardActions, CardContent, FormControl, TextField, Typography } from '@mui/material';
 import { useState } from 'react';
 
 import { post } from '../helpers/api.js';
 
 function Login() {
+  const navigate = useNavigate();
   // we need to store the entered email and password, also we store a variable for an error we might show
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,20 +24,23 @@ function Login() {
       return;
     }
 
-    // we send a post request with email and password using our own post function (see helpers/api.js), make sure to await it!
-    const response = await post(
-      '/auth/token',
-      {
-        email,
-        password,
-      },
-      false
-    );
+    try {
+      // we send a post request with email and password using our own post function (see helpers/api.js), make sure to await it!
+      const tokens = await post(
+        '/auth/token',
+        {
+          client_id: email,
+          client_secret: password,
+          grant_type: 'client_credentials'
+        },
+        false
+      );
 
-    // handle response data
-    if (response.data) {
-      // TODO: handle tokens from data
-    } else {
+      localStorage.setItem('access_token', tokens.access_token);
+      localStorage.setItem('refresh_token', tokens.refresh_token);
+
+      navigate('/');
+    } catch (err) {
       // when response does not contain data, show an error
       setError('Login failed, please check your credentials.');
     }

@@ -1,10 +1,11 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Button, CardActions, CardContent, FormControl, TextField, Typography } from '@mui/material';
 import { useState } from 'react';
 
 import { post } from '../helpers/api.js';
 
 function Register() {
+  const navigate = useNavigate();
   // we need to store the entered email and password (2 times for password repeat), also we store a variable for an error we might show
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,20 +35,19 @@ function Register() {
       return;
     }
 
-    // we send a post request with email and password using our own post function (see helpers/api.js), make sure to await it!
-    const response = await post(
-      '/auth/register',
-      {
-        email,
-        password,
-      },
-      false
-    );
+    try {
+      // we send a post request with email and password using our own post function (see helpers/api.js), make sure to await it!
+      await post(
+        '/auth/register',
+        {
+          email,
+          password,
+        },
+        false
+      );
 
-    // handle response data
-    if (response.data) {
-      // TODO: handle success
-    } else {
+      navigate('/login');
+    } catch (err) {
       // when response does not contain data, show an error
       setError('Registration failed, please try again.');
     }
