@@ -42,9 +42,9 @@ try {
 
 
 
-  // logging middleware - TODO: remove for production use, it will log passwords in plaintext!
+  // logging middleware - do not log sensitive information (such as request bodies or Authorization headers) in productiuon use
   app.use((req, res, next) => {
-    console.log(`\n${req.method} - ${req.path}\n\tHeaders:\n\t\t${JSON.stringify(req.headers)}\n\tBody:\n\t\t${JSON.stringify(req.body)}`);
+    console.log(`\n${req.method} - ${req.path}`);
     next();
   });
 
@@ -54,16 +54,20 @@ try {
 
   // auth token endpoint for login and token exchange
   app.post('/api/auth/token', async (req, res) => {
+    // grant type determines if we login with username/password (client_credentials) or if a refresh_token is used
     switch (req.body.grant_type) {
       case 'client_credentials':
-        const email = req.body.client_id.toLowerCase();
+        const email = req.body.client_id.toLowerCase(); // email is lower cased, because it should work case insensitive
         const password = req.body.client_secret;
         const existingUser = await colUsers.findOne({ email });
+        // check if user exists
         if (!existingUser) {
           res.status(400).send();
         } else {
+          // compare sent password with hash from database
           const passwordsMatch = await bcrypt.compare(password, existingUser.hash);
           if (passwordsMatch) {
+            // generate JWT tokens
             const accessToken = jwt.sign({
               sub: existingUser._id,
               iat: Date.now(),
@@ -75,8 +79,10 @@ try {
               exp: new Date(Date.now() + (1000 * 60 * 60 * 24 * 365)).getTime(),
             }, process.env.JWT_SECURE_KEY);
 
+            // send tokens
             res.status(200).json({ access_token: accessToken, refresh_token: refreshToken });
           } else {
+            // passwords missmatch
             res.status(400).send();
           }
         }
@@ -84,7 +90,9 @@ try {
       case 'refresh_token':
         const token = req.body.refresh_token;
         try {
+          // check if refresh token is valid (thwors error if not)
           const decoded = jwt.verify(token, process.env.JWT_SECURE_KEY);
+          // generate new access token
           const accessToken = jwt.sign({
             sub: decoded.sub,
             iat: Date.now(),
@@ -93,6 +101,7 @@ try {
 
           res.status(200).json({ access_token: accessToken });
         } catch (err) {
+          // token invalid
           res.status(400).send();
         }
         break;
@@ -104,13 +113,16 @@ try {
   // auth register endpoint for user creation
   app.post('/api/auth/register', async (req, res) => {
     const user = {
-      email: req.body.email.toLowerCase(),
-      hash: await bcrypt.hash(req.body.password, 10),
+      email: req.body.email.toLowerCase(), // email is lower cased, because it should work case insensitive
+      hash: await bcrypt.hash(req.body.password, 10), // password is hashed/salted so it is not saved in plaintext (readable) in database - salts give different hashes even if multiple users have same password
     };
+    // check if user with that email already exists
     const existingUser = await colUsers.findOne({ email: user.email });
     if (existingUser) {
+      // do not create new user if it already exists
       res.status(500).send();
     } else {
+      // create new user in database
       const insertion = await colUsers.insertOne(user);
       if (insertion.acknowledged) {
         res.status(200).json({});
@@ -122,17 +134,23 @@ try {
 
   // Authentication middleware
   const auth = async (req, res, next) => {
+    // get token from authorization header and remove "Bearer " text from it
     const token = req.headers.authorization.replace(/Bearer /i, '');
     try {
+      // validate token (throws error if invalid)
       const decoded = jwt.verify(token, process.env.JWT_SECURE_KEY);
+      // get user the token belonbgs to (user _id is stored in token as sub (subject))
       const existingUser = await colUsers.findOne({ _id: new ObjectId(decoded.sub) });
       if (existingUser) {
+        // if user exists, he can access the route. we add the user object to the req-Object, so we can access it from any protected route
         req.user = existingUser;
         next();
       } else {
+        // if user does not exist, he doesn't get access even so the token is valid
         res.status(401).send();
       }
     } catch (err) {
+      // no access when token is invalid
       res.status(401).send();
     }
   }
@@ -142,13 +160,13 @@ try {
   // ToDo Endpoints
 
   // get all ToDos
-  app.get('/api/todos', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+  app.get('/api/todos', auth, async (req, res) => { // note that the `auth` middleware is used here, so this route is protected from unauthorized access
     const toDos = await colToDos.find({ user_id: req.user._id }).toArray();
     res.status(200).json(toDos);
   });
 
   // get one ToDo
-  app.get('/api/todos/:id', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+  app.get('/api/todos/:id', auth, async (req, res) => { // note that the `auth` middleware is used here, so this route is protected from unauthorized access
     const toDo = await colToDos.findOne({ _id: new ObjectId(req.params.id), user_id: req.user._id });
     if (toDo) {
       res.status(200).json(toDo);
@@ -158,7 +176,7 @@ try {
   });
 
   // add a ToDo
-  app.post('/api/todos/', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+  app.post('/api/todos/', auth, async (req, res) => {  // note that the `auth` middleware is used here, so this route is protected from unauthorized access
     const data = req.body;
     data.user_id = req.user._id;
     const insertion = await colToDos.insertOne(data);
@@ -175,7 +193,7 @@ try {
   });
 
   // update a ToDo
-  app.put('/api/todos/:id', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+  app.put('/api/todos/:id', auth, async (req, res) => { // note that the `auth` middleware is used here, so this route is protected from unauthorized access
     const updateData = req.body;
     delete updateData._id;
     const updated = await colToDos.updateOne({ _id: new ObjectId(req.params.id), user_id: req.user._id }, { $set: updateData });
@@ -192,7 +210,7 @@ try {
   });
 
   // delete a ToDo
-  app.delete('/api/todos/:id', auth, async (req, res) => { // TODO: make sure user is authenticated and only accesses his own data
+  app.delete('/api/todos/:id', auth, async (req, res) => { // note that the `auth` middleware is used here, so this route is protected from unauthorized access
     const deleted = await colToDos.deleteOne({ _id: new ObjectId(req.params.id), user_id: req.user._id });
     if (deleted.deletedCount === 1) {
       res.status(200).json({});

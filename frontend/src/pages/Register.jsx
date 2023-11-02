@@ -46,6 +46,7 @@ function Register() {
         false
       );
 
+      // when successfull navigate to login
       navigate('/login');
     } catch (err) {
       // when response does not contain data, show an error

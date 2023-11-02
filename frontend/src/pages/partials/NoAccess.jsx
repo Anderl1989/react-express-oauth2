@@ -4,12 +4,13 @@ import PropTypes from 'prop-types';
 import { isTokenValid } from "../../helpers/token";
 
 function NoAccess({ children }) {
-  // TODO: remove access tokens
+  // check if token is NOT valid and render child component
   if (!isTokenValid(true)) {
     return (
       <>{ children }</>
     );
   }
+  // otherwise redirect to todos page
   return (
     <Navigate to="/" replace={true} />
   );

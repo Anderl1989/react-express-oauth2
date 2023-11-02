@@ -31,11 +31,11 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Access><ToDos /></Access>,
+        element: <Access><ToDos /></Access>,// Access component checks if user is logged in and redirects to login if not
       },
       {
         path: 'login',
-        element: <NoAccess><Login /></NoAccess>,
+        element: <NoAccess><Login /></NoAccess>, // NoAccess component checks if user is logged in and redirects to / if so
       },
       {
         path: 'register',

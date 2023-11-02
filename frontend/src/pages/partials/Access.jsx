@@ -4,12 +4,13 @@ import PropTypes from 'prop-types';
 import { isTokenValid } from "../../helpers/token";
 
 function Access({ children }) {
-  // TODO: remove access tokens
+  // check if token is valid (user logged in) and draw child component
   if (isTokenValid(true)) {
     return (
       <>{ children }</>
     );
   }
+  // when token is not valid, redirect to login
   return (
     <Navigate to="/login" replace={true} />
   );

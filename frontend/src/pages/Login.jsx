@@ -36,9 +36,11 @@ function Login() {
         false
       );
 
+      // save tokens in local storage, so they are persisted even when the browser is closed
       localStorage.setItem('access_token', tokens.access_token);
       localStorage.setItem('refresh_token', tokens.refresh_token);
 
+      // navigate to todos list
       navigate('/');
     } catch (err) {
       // when response does not contain data, show an error

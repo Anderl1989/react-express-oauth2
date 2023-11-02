@@ -9,9 +9,11 @@ export default async function request(resource, method = 'GET', data = {}, authe
     ? `http://localhost:3000/api${resource}`
     : `/api${resource}`;
 
-  // TODO: handle auth expired
+  // read access token from local storage
   let accessToken = localStorage.getItem('access_token');
+  // if the request should be authenticated, we check the token validity
   if (authenticated) {
+    // if token is not valid, we try to use the refresh token, to get a new access token
     if (!isTokenValid()) {
       const tokens = await post(
         '/auth/token',
@@ -21,7 +23,9 @@ export default async function request(resource, method = 'GET', data = {}, authe
         },
         false
       );
+      // save new access token
       localStorage.setItem('access_token', tokens.access_token);
+      // make sure we use the new access token in the original request
       accessToken = tokens.access_token;
     }
   }
@@ -29,7 +33,7 @@ export default async function request(resource, method = 'GET', data = {}, authe
   // add authentication header if request should be authenticated
   const headers = authenticated
     ? {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`, // this header will authenticate the request in the server
     }
     : {};
 
